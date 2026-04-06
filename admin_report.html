@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>عرض البلاغ</title>
+  <link rel="stylesheet" href="style_report.css">
+</head>
+
+<body>
+
+<div class="header">عرض البلاغ</div>
+
+<div class="container" style="margin-top:200px;">
+  <div class="card" id="reportCard">
+
+    <h3 id="r_id"></h3>
+
+    <p><b>نوع البلاغ:</b> <span id="r_type"></span></p>
+    <p><b>الوصف:</b> <span id="r_desc"></span></p>
+    <p><b>الموقع:</b> <span id="r_location"></span></p>
+    <p><b>من:</b> <span id="r_from"></span></p>
+    <p><b>إلى:</b> <span id="r_to"></span></p>
+    <p><b>شدة البلاغ:</b> <span id="r_rate"></span></p>
+
+    <br>
+
+    <label><b>الحالة الحالية:</b></label>
+    <div class="custom-select" onclick="toggleDropdownStatus()">
+      <div id="selectedStatus">قيد المراجعة</div>
+      <ul id="statusOptions" class="options">
+        <li onclick="selectStatus('قيد المراجعة', event)">قيد المراجعة</li>
+        <li onclick="selectStatus('قيد التنفيذ', event)">قيد التنفيذ</li>
+        <li onclick="selectStatus('تم الحل', event)">تم الحل</li>
+      </ul>
+    </div>
+
+    <br>
+
+    <input type="hidden" id="statusValue">
+
+    <button class="primary" onclick="saveStatus()">حفظ الحالة</button>
+
+    <div style="display:flex; justify-content:space-between; margin-top:20px;">
+      <button class="light" onclick="window.location.href='admin.html'">رجوع</button>
+
+      <button class="danger" onclick="deleteReport()" style="background:#d9534f; color:white;">
+        حذف البلاغ
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let selectedId = localStorage.getItem("adminSelectedReport");
+
+let trainerReports = JSON.parse(localStorage.getItem("teacherReport")) || [];
+let traineeReports = JSON.parse(localStorage.getItem("traineeReports")) || [];
+
+let all = [...trainerReports, ...traineeReports];
+let report = all.find(r => r.id == selectedId);
+
+if(report){
+  document.getElementById("r_id").innerText = "بلاغ #" + report.id;
+  document.getElementById("r_type").innerText = report.type;
+  document.getElementById("r_desc").innerText = report.desc;
+  document.getElementById("r_location").innerText = report.location || "-";
+  document.getElementById("r_from").innerText = report.from || "-";
+  document.getElementById("r_to").innerText = report.to || "-";
+  document.getElementById("r_rate").innerText = report.rate;
+
+  document.getElementById("selectedStatus").innerText =
+    report.status === "processing" ? "قيد المراجعة" :
+    report.status === "running" ? "قيد التنفيذ" :
+    "تم الحل";
+
+  document.getElementById("statusValue").value = report.status;
+}
+
+function toggleDropdownStatus() {
+  const list = document.getElementById("statusOptions");
+  list.style.display = list.style.display === "block" ? "none" : "block";
+}
+
+function selectStatus(value, event) {
+  event.stopPropagation();
+  document.getElementById("selectedStatus").innerText = value;
+
+  document.getElementById("statusValue").value =
+    value === "قيد المراجعة" ? "processing" :
+    value === "قيد التنفيذ" ? "running" :
+    "done";
+
+  document.getElementById("statusOptions").style.display = "none";
+}
+
+document.addEventListener("click", function(e){
+  const list = document.getElementById("statusOptions");
+  const select = document.querySelector(".custom-select");
+  if(select && !select.contains(e.target)){
+    list.style.display = "none";
+  }
+});
+
+function saveStatus(){
+  let newStatus = document.getElementById("statusValue").value;
+
+  trainerReports = trainerReports.map(r => {
+    if(r.id == selectedId){
+      r.status = newStatus;
+      if(newStatus === "done") r.solvedAt = Date.now();
+    }
+    return r;
+  });
+  localStorage.setItem("teacherReport", JSON.stringify(trainerReports));
+
+  traineeReports = traineeReports.map(r => {
+    if(r.id == selectedId){
+      r.status = newStatus;
+      if(newStatus === "done") r.solvedAt = Date.now();
+    }
+    return r;
+  });
+  localStorage.setItem("traineeReports", JSON.stringify(traineeReports));
+
+  localStorage.setItem("adminFilter", "processing");
+
+  alert("تم تحديث حالة البلاغ");
+  window.location.href = "admin.html";
+}
+
+function deleteReport() {
+  if(!confirm("هل أنت متأكد؟")) return;
+
+  trainerReports = trainerReports.filter(r => r.id != selectedId);
+  localStorage.setItem("teacherReport", JSON.stringify(trainerReports));
+
+  traineeReports = traineeReports.filter(r => r.id != selectedId);
+  localStorage.setItem("traineeReports", JSON.stringify(traineeReports));
+
+  alert("تم حذف البلاغ");
+  window.location.href = "admin.html";
+}
+</script>
+
+</body>
+</html>
