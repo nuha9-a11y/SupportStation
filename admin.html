@@ -1,12 +1,24 @@
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>لوحة تحكم المسؤول</title>
   <link rel="stylesheet" href="adminStyles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
-<body class="admin-body" style="display:flex; flex-direction:column; min-height:100vh;">
+<body class="admin-body">
+<script>
+const ADMIN_EMAIL = "445153613@tvtc.edu.sa"; // غيريه بإيميلك
+
+const email = localStorage.getItem("user_email");
+
+if(email !== ADMIN_EMAIL){
+  alert("ليس لديك صلاحية الدخول");
+  window.location.href = "login.html";
+}
+</script>
 
 <header class="admin-header">
   <div class="admin-left">
@@ -16,25 +28,26 @@
       <span>محطة الدعم</span>
     </div>
   </div>
+
   <a href="index.html" class="logout">تسجيل الخروج</a>
 </header>
 
-<main class="admin-main" style="flex:1;">
+<main class="admin-main">
 
   <!-- ===== Stats ===== -->
-  <div class="admin-cards" style="margin-top:100px;">
+  <div class="admin-cards">
     <button class="stat-card stat-click active" data-filter="all" onclick="setFilter('all')">
       <h3>إجمالي البلاغات</h3>
       <p id="countAll">0</p>
     </button>
 
-    <button class="stat-card stat-click" data-filter="processing" onclick="setFilter('processing')">
-      <h3>قيد التنفيذ</h3>
-      <p id="countProcessing">0</p>
+    <button class="stat-card stat-click" data-filter="review" onclick="setFilter('review')">
+      <h3>قيد المراجعة</h3>
+      <p id="countReview">0</p>
     </button>
 
     <button class="stat-card stat-click" data-filter="done" onclick="setFilter('done')">
-      <h3>تم الحل</h3>
+      <h3>تم التنفيذ</h3>
       <p id="countDone">0</p>
     </button>
   </div>
@@ -57,155 +70,178 @@
 
 </main>
 
+<footer class="main-footer">
+  <div class="footer-content">
+    <p>&copy; 2026 حقوق محفوظة | محطة الدعم</p>
+  </div>
+</footer>
+
 <script>
+function getClient() {
+  return window.supabase.createClient(
+    'https://mcxdjisoyqdnyieboqpy.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jeGRqaXNveXFkbnlpZWJvcXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDI3NDAsImV4cCI6MjA5MDk3ODc0MH0.kIwJ1pc-GLX1lTvstLSDZ5Li1rd9vwutI4-Wz_HR6nE'
+  );
+}
+
 let currentFilter = "all";
 
-function setFilter(filter){
+function normalizeStatus(status) {
+  if (status === "تم الحل") return "تم التنفيذ";
+  if (status === "قيد التنفيذ") return "قيد المراجعة";
+  if (status === "قيد المعالجة") return "قيد المراجعة";
+  return status || "قيد المراجعة";
+}
+
+function setFilter(filter) {
   currentFilter = filter;
-  document.querySelectorAll(".stat-click").forEach(b=>{
-    b.classList.toggle("active", b.dataset.filter === filter);
+
+  document.querySelectorAll(".stat-click").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.filter === filter);
   });
+
   applyFilter();
 }
 
-function applyFilter(){
+function applyFilter() {
   const cards = document.querySelectorAll(".report-card");
 
-  cards.forEach(card=>{
-    const s = card.dataset.status;
+  cards.forEach(card => {
+    const status = card.dataset.status;
 
-    if(currentFilter === "all"){
-      card.style.display = (s === "processing") ? "" : "none";
-    }
-    else if(currentFilter === "processing"){
-      card.style.display = (s === "running") ? "" : "none";
-    }
-    else if(currentFilter === "done"){
-      card.style.display = (s === "done") ? "" : "none";
+    if (currentFilter === "all") {
+      card.style.display = "";
+    } else if (currentFilter === "review") {
+      card.style.display = (status === "قيد المراجعة") ? "" : "none";
+    } else if (currentFilter === "done") {
+      card.style.display = (status === "تم التنفيذ") ? "" : "none";
     }
   });
 
   updateCounts();
 }
 
-function updateCounts(){
-  const cards = document.querySelectorAll(".report-card");
-  let total=0, processing=0, done=0;
+function updateCounts() {
+  const allReports = document.querySelectorAll(".report-card");
 
-  cards.forEach(card=>{
+  let total = 0;
+  let review = 0;
+  let done = 0;
+
+  allReports.forEach(card => {
     const status = card.dataset.status;
-
-    // إجمالي البلاغات = قيد المراجعة فقط
-    if(status === "processing") total++;
-
-    // قيد التنفيذ = running فقط
-    if(status === "running") processing++;
-
-    // تم الحل
-    if(status === "done") done++;
+    total++;
+    if (status === "قيد المراجعة") review++;
+    if (status === "تم التنفيذ") done++;
   });
 
   document.getElementById("countAll").textContent = total;
-  document.getElementById("countProcessing").textContent = processing;
+  document.getElementById("countReview").textContent = review;
   document.getElementById("countDone").textContent = done;
 }
 
-function deleteOldReports() {
-  const now = Date.now();
-  const fiveMinutes = 5 * 60 * 1000;
-
-  let trainer = JSON.parse(localStorage.getItem("teacherReport")) || [];
-  trainer = trainer.filter(r => !(r.status === "done" && r.solvedAt && (now - r.solvedAt) >= fiveMinutes));
-  localStorage.setItem("teacherReport", JSON.stringify(trainer));
-
-  let trainee = JSON.parse(localStorage.getItem("traineeReports")) || [];
-  trainee = trainee.filter(r => !(r.status === "done" && r.solvedAt && (now - r.solvedAt) >= fiveMinutes));
-  localStorage.setItem("traineeReports", JSON.stringify(trainee));
+function openReport(id) {
+  localStorage.setItem("adminSelectedReport", id);
+  window.location.href = "admin_report.html";
 }
 
-function loadReports() {
-
-  // 1) نقل البلاغات القديمة
-  let old = JSON.parse(localStorage.getItem("studentreports"));
-  if(old){
-    localStorage.setItem("traineeReports", JSON.stringify(old));
-    localStorage.removeItem("studentreports");
-  }
-
-  deleteOldReports();
-
-  // 2) تحميل البلاغات
-  let trainerReports = JSON.parse(localStorage.getItem("teacherReport")) || [];
-  let traineeReports = JSON.parse(localStorage.getItem("traineeReports")) || [];
-
-  // 3) تحويل الحالات القديمة
-  function normalizeStatus(r){
-    if(r.status === "قيد المراجعة") r.status = "processing";
-    if(r.status === "قيد التنفيذ") r.status = "running";
-    if(r.status === "تم الحل") r.status = "done";
-    return r;
-  }
-
-  trainerReports = trainerReports.map(normalizeStatus);
-  traineeReports = traineeReports.map(normalizeStatus);
-
-  localStorage.setItem("teacherReport", JSON.stringify(trainerReports));
-  localStorage.setItem("traineeReports", JSON.stringify(traineeReports));
-
-  // 4) عرض البلاغات
-  const trainerBox = document.getElementById("trainerList");
-  const traineeBox = document.getElementById("traineeList");
-
-  trainerBox.innerHTML = "";
-  traineeBox.innerHTML = "";
-
-  if (trainerReports.length === 0) {
-    trainerBox.innerHTML = `<p style="text-align:center; padding:20px; color:#777;">لا توجد بلاغات</p>`;
-  } else {
-    trainerReports.forEach(r => trainerBox.innerHTML += createReportCard(r));
-  }
-
-  if (traineeReports.length === 0) {
-    traineeBox.innerHTML = `<p style="text-align:center; padding:20px; color:#777;">لا توجد بلاغات</p>`;
-  } else {
-    traineeReports.forEach(r => traineeBox.innerHTML += createReportCard(r));
-  }
-
-  applyFilter();
-}
-
-function createReportCard(r){
-  let statusText =
-    r.status === "processing" ? "قيد المراجعة" :
-    r.status === "running" ? "قيد التنفيذ" :
-    "تم الحل";
+function createReportCard(r) {
+  const statusText = normalizeStatus(r.status);
 
   return `
-    <div class="report-card" data-status="${r.status}">
-      <h3>#${r.id} - ${r.type}</h3>
-      <p><b>الوصف:</b> ${r.desc}</p>
-      <p><b>الموقع:</b> ${r.location || "-"}</p>
+    <div class="report-card" data-status="${statusText}">
+      <div class="report-main">
+        <div class="report-head">
+          <h3>بلاغ #${r.id} - ${r.type || "-"}</h3>
+          <span class="status-tag">${statusText}</span>
+        </div>
 
-      <span class="status-tag">${statusText}</span>
+        <p><b>الوصف:</b> ${r.description || "-"}</p>
+        <p><b>الموقع:</b> ${r.location || "-"}</p>
+        <p><b>مقدم البلاغ:</b> ${r.sender_name || "-"}</p>
+        <p><b>الإيميل:</b> ${r.sender_email || "-"}</p>
+        <p><b>الدور:</b> ${r.sender_role || "-"}</p>
+      </div>
 
       <button class="btn-process" onclick="openReport('${r.id}')">عرض البلاغ</button>
     </div>
   `;
 }
 
-function openReport(id){
-  localStorage.setItem("adminSelectedReport", id);
-  window.location.href = "admin_report.html";
+async function loadReports() {
+  const supabase = getClient();
+
+  const { data, error } = await supabase
+    .from("reports")
+    .select("*")
+    .order("id", { ascending: false });
+
+  const trainerBox = document.getElementById("trainerList");
+  const traineeBox = document.getElementById("traineeList");
+
+  if (error) {
+    trainerBox.innerHTML = `<p class="empty-text">حدث خطأ في تحميل البلاغات</p>`;
+    traineeBox.innerHTML = `<p class="empty-text">حدث خطأ في تحميل البلاغات</p>`;
+    return;
+  }
+
+  const reports = data || [];
+
+  const trainerReports = reports.filter(r => r.sender_role === "trainer");
+  const traineeReports = reports.filter(r => r.sender_role === "trainee");
+
+  trainerBox.innerHTML = "";
+  traineeBox.innerHTML = "";
+
+  if (trainerReports.length === 0) {
+    trainerBox.innerHTML = `<p class="empty-text">لا توجد بلاغات</p>`;
+  } else {
+    trainerReports.forEach(r => {
+      trainerBox.innerHTML += createReportCard(r);
+    });
+  }
+
+  if (traineeReports.length === 0) {
+    traineeBox.innerHTML = `<p class="empty-text">لا توجد بلاغات</p>`;
+  } else {
+    traineeReports.forEach(r => {
+      traineeBox.innerHTML += createReportCard(r);
+    });
+  }
+
+  applyFilter();
 }
 
+/* ============================
+   🔥 حذف البلاغات بعد 5 دقائق
+   ============================ */
+async function deleteOldReports() {
+  const supabase = getClient();
+  const now = Date.now();
+  const fiveMinutes = 5 * 60 * 1000;
+
+  const { data: reports, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("status", "تم التنفيذ");
+
+  if (error || !reports) return;
+
+  for (const r of reports) {
+    if (r.solvedAt && (now - r.solvedAt) >= fiveMinutes) {
+      await supabase.from("reports").delete().eq("id", r.id);
+    }
+  }
+
+  loadReports(); // تحديث القائمة بعد الحذف
+}
+
+/* تشغيل الحذف كل دقيقة */
+setInterval(deleteOldReports, 60 * 1000);
+
+/* تحميل البلاغات عند فتح الصفحة */
 loadReports();
 </script>
-
-<footer class="main-footer">
-  <div class="footer-content">
-      <p>&copy; 2026 حقوق محفوظة | محطة الدعم</p>
-  </div>
-</footer>
 
 </body>
 </html>
