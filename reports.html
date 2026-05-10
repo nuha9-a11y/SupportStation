@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/> 
+  <title>لوحة تحكم المسؤول - البلاغات</title>
+  <link rel="stylesheet" href="reports.css"/>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body class="admin-body">
+
+<header class="admin-header">
+  <button id="menuToggle" class="menu-btn" type="button" aria-label="فتح القائمة">☰</button>
+
+  <div class="admin-left">
+    <img src="img/logo.png" class="admin-logo" alt="Logo">
+    <div class="admin-title">
+      <h1>البلاغات</h1>
+      <span>نظرة عامة على النظام</span>
+    </div>
+  </div>
+
+  <a href="index.html" class="logout">تسجيل الخروج</a>
+</header>
+
+<div id="overlay" class="overlay"></div>
+
+<div class="dashboard-layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <h2>محطة الدعم</h2>
+    </div>
+
+    <ul class="sidebar-menu">
+      <li><a href="admin.html">الصفحة الرئيسية</a></li>
+      <li class="active"><a href="reports.html">البلاغات</a></li>
+      <li><a href="tasks.html">مهام السلامة</a></li>
+      <li><a href="events.html">الفعاليات والأيام العالمية</a></li>
+    </ul>
+  </aside>
+
+  <main class="admin-main">
+
+    <div class="admin-cards">
+      <button class="stat-card stat-click active" data-filter="all" onclick="setFilter('all')">
+        <h3>إجمالي البلاغات</h3>
+        <p id="countAll">0</p>
+      </button>
+
+      <button class="stat-card stat-click" data-filter="review" onclick="setFilter('review')">
+        <h3>قيد المراجعة</h3>
+        <p id="countReview">0</p>
+      </button>
+
+      <button class="stat-card stat-click" data-filter="done" onclick="setFilter('done')">
+        <h3>تم التنفيذ</h3>
+        <p id="countDone">0</p>
+      </button>
+    </div>
+<button onclick="exportExcel()" class="btn-process" style="margin-bottom:15px;">
+  تصدير البلاغات إلى Excel
+</button>
+
+    <section class="reports-section">
+      <h2 class="section-title">بلاغات المدربين</h2>
+      <div class="reports-box">
+        <div class="reports-scroll" id="trainerList"></div>
+      </div>
+    </section>
+
+    <section class="reports-section">
+      <h2 class="section-title">بلاغات المتدربين</h2>
+      <div class="reports-box">
+        <div class="reports-scroll" id="traineeList"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+
+  /* ===========================
+      القائمة الجانبية
+  ============================ */
+  const menuBtn = document.getElementById("menuToggle");
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("overlay");
+
+  function openSidebar() {
+    if (window.innerWidth <= 992) {
+      sidebar.classList.add("open");
+      overlay.classList.add("show");
+      document.body.style.overflow = "hidden";
+    }
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    overlay.classList.remove("show");
+    document.body.style.overflow = "";
+  }
+
+  menuBtn.addEventListener("click", () => {
+    sidebar.classList.contains("open") ? closeSidebar() : openSidebar();
+  });
+
+  overlay.addEventListener("click", closeSidebar);
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 992) closeSidebar();
+  });
+
+
+
+  /* ===========================
+      Supabase Client
+  ============================ */
+  const supabase = window.supabase.createClient(
+    "https://mcxdjisoyqdnyieboqpy.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jeGRqaXNveXFkbnlpZWJvcXB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDI3NDAsImV4cCI6MjA5MDk3ODc0MH0.kIwJ1pc-GLX1lTvstLSDZ5Li1rd9vwutI4-Wz_HR6nE"
+  );
+
+
+
+  /* ===========================
+      الفلترة
+  ============================ */
+  let currentFilter = "all";
+
+  function normalizeStatus(status) {
+    if (status === "تم الحل") return "تم التنفيذ";
+    if (status === "قيد التنفيذ") return "قيد المراجعة";
+    if (status === "قيد المعالجة") return "قيد المراجعة";
+    return status || "قيد المراجعة";
+  }
+
+  function setFilter(filter) {
+    currentFilter = filter;
+
+    document.querySelectorAll(".stat-click").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.filter === filter);
+    });
+
+    applyFilter();
+  }
+
+  window.setFilter = setFilter;
+
+  function applyFilter() {
+    const cards = document.querySelectorAll(".report-card");
+
+    cards.forEach(card => {
+      const status = card.dataset.status;
+
+      if (currentFilter === "all") {
+        card.style.display = "";
+      } else if (currentFilter === "review") {
+        card.style.display = (status === "قيد المراجعة") ? "" : "none";
+      } else if (currentFilter === "done") {
+        card.style.display = (status === "تم التنفيذ") ? "" : "none";
+      }
+    });
+
+    updateCounts();
+  }
+
+  function updateCounts() {
+    const allReports = document.querySelectorAll(".report-card");
+
+    let total = 0;
+    let review = 0;
+    let done = 0;
+
+    allReports.forEach(card => {
+      const status = card.dataset.status;
+      total++;
+      if (status === "قيد المراجعة") review++;
+      if (status === "تم التنفيذ") done++;
+    });
+
+    document.getElementById("countAll").textContent = total;
+    document.getElementById("countReview").textContent = review;
+    document.getElementById("countDone").textContent = done;
+  }
+
+
+
+  /* ===========================
+      إنشاء بطاقة بلاغ
+  ============================ */
+  function createReportCard(r) {
+    const statusText = normalizeStatus(r.status);
+
+    return `
+      <div class="report-card" data-status="${statusText}">
+        <div class="report-main">
+          <div class="report-head">
+            <h3>بلاغ #${r.id} - ${r.type || "-"}</h3>
+            <span class="status-tag">${statusText}</span>
+          </div>
+
+          <p><b>الوصف:</b> ${r.description || "-"}</p>
+          <p><b>الموقع:</b> ${r.location || "-"}</p>
+          <p><b>مقدم البلاغ:</b> ${r.sender_name || "-"}</p>
+          <p><b>الإيميل:</b> ${r.sender_email || "-"}</p>
+          <p><b>الدور:</b> ${r.sender_role || "-"}</p>
+
+          ${r.image_url ? `
+            <div class="report-image-box">
+              <p><b>الصورة المرفقة:</b></p>
+              <img src="${r.image_url}" alt="صورة البلاغ" class="report-image">
+            </div>
+          ` : ""}
+        </div>
+
+        <button class="btn-process" onclick="openReport('${r.id}')">عرض البلاغ</button>
+      </div>
+    `;
+  }
+
+  window.openReport = function(id) {
+    localStorage.setItem("adminSelectedReport", id);
+    window.location.href = "admin_report.html";
+  };
+
+
+
+  /* ===========================
+      تحميل البلاغات
+  ============================ */
+  async function loadReports() {
+    const trainerBox = document.getElementById("trainerList");
+    const traineeBox = document.getElementById("traineeList");
+
+    const { data, error } = await supabase
+      .from("reports")
+      .select("*")
+      .order("id", { ascending: false });
+
+    if (error) {
+      console.log("Supabase Error:", error);
+      trainerBox.innerHTML = `<p class="empty-text">خطأ في تحميل البلاغات</p>`;
+      traineeBox.innerHTML = `<p class="empty-text">خطأ في تحميل البلاغات</p>`;
+      return;
+    }
+
+    const reports = data || [];
+
+    const trainerReports = reports.filter(r => r.sender_role === "trainer");
+    const traineeReports = reports.filter(r => r.sender_role === "trainee");
+
+    trainerBox.innerHTML = trainerReports.length
+      ? trainerReports.map(createReportCard).join("")
+      : `<p class="empty-text">لا توجد بلاغات</p>`;
+
+    traineeBox.innerHTML = traineeReports.length
+      ? traineeReports.map(createReportCard).join("")
+      : `<p class="empty-text">لا توجد بلاغات</p>`;
+
+    applyFilter();
+  }
+
+  loadReports();
+
+});
+
+  function exportExcel() {
+  let data = [];
+
+  // العناوين
+  data.push([
+    "رقم البلاغ",
+    "نوع البلاغ",
+    "الوصف",
+    "الموقع",
+    "شدة البلاغ",
+    "الحالة",
+    "مقدم البلاغ",
+    "الإيميل",
+    "الدور",
+    "تاريخ الإنشاء",
+    "الصورة",
+    "منقول من",
+    "منقول إلى"
+  ]);
+
+  // كل البلاغات المعروضة
+  const cards = document.querySelectorAll(".report-card");
+
+  if (cards.length === 0) {
+    alert("لا توجد بلاغات للتصدير");
+    return;
+  }
+
+  cards.forEach(card => {
+    const id = card.querySelector("h3")?.textContent.match(/\d+/)?.[0] || "";
+    const type = card.querySelector("h3")?.textContent.split("-")[1]?.trim() || "";
+    const desc = card.querySelector("p:nth-of-type(1)")?.textContent.replace("الوصف:", "").trim() || "";
+    const loc = card.querySelector("p:nth-of-type(2)")?.textContent.replace("الموقع:", "").trim() || "";
+    const sender = card.querySelector("p:nth-of-type(3)")?.textContent.replace("مقدم البلاغ:", "").trim() || "";
+    const email = card.querySelector("p:nth-of-type(4)")?.textContent.replace("الإيميل:", "").trim() || "";
+    const role = card.querySelector("p:nth-of-type(5)")?.textContent.replace("الدور:", "").trim() || "";
+    const status = card.dataset.status || "";
+    const created = card.dataset.created || "";
+    const rate = card.dataset.rate || "";
+    const img = card.dataset.image || "";
+    const transferFrom = card.dataset.transfer_from || "";
+    const transferTo = card.dataset.transfer_to || "";
+
+    data.push([
+      id,
+      type,
+      desc,
+      loc,
+      rate,
+      status,
+      sender,
+      email,
+      role,
+      created,
+      img,
+      transferFrom,
+      transferTo
+    ]);
+  });
+
+  // إنشاء الشيت
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // تنسيق الأعمدة
+  ws["!cols"] = [
+    { wch: 12 },  // رقم البلاغ
+    { wch: 15 },  // النوع
+    { wch: 40 },  // الوصف
+    { wch: 20 },  // الموقع
+    { wch: 10 },  // الشدة
+    { wch: 15 },  // الحالة
+    { wch: 18 },  // مقدم البلاغ
+    { wch: 25 },  // الإيميل
+    { wch: 12 },  // الدور
+    { wch: 20 },  // تاريخ الإنشاء
+    { wch: 30 },  // الصورة
+    { wch: 15 },  // منقول من
+    { wch: 15 }   // منقول إلى
+  ];
+
+  // إنشاء الملف
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "البلاغات");
+
+  // تحميل
+  XLSX.writeFile(wb, "البلاغات.xlsx");
+}
+</script>
+
+<footer class="main-footer">
+  <div class="footer-content">
+    <p>&copy; 2026 حقوق محفوظة | محطة الدعم</p>
+    <ul class="footer-links">
+      <li><a href="index.html">الرئيسية</a></li>
+      <li><a href="about.html">عن الموقع</a></li>
+      <li><a href="https://twitter.com/support0station" target="_blank">اتصل بنا</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>
